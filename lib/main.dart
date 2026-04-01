@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,6 +7,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:http/http.dart' as http;
 
 import 'firebase_options.dart';
 
@@ -25,7 +27,9 @@ Future<void> _initializeFirebaseSafely() async {
   }
 }
 
-final ValueNotifier<bool> _isCompletingRegistration = ValueNotifier<bool>(false);
+final ValueNotifier<bool> _isCompletingRegistration = ValueNotifier<bool>(
+  false,
+);
 final ValueNotifier<UserProfile?> _pendingUserProfile =
     ValueNotifier<UserProfile?>(null);
 const String _defaultLastSeenImageUrl =
@@ -34,6 +38,7 @@ const String _defaultLastSeenImageUrl =
 const String _defaultLastSeenEnvironment =
     'Near the garden path, next to the wooden fence.';
 const Duration _bleLostTimeout = Duration(seconds: 8);
+const String _raspberryPiBaseUrl = 'http://192.168.3.51:8000';
 
 enum PetKind {
   dog('dog', 'Dog', '🐶'),
@@ -73,9 +78,9 @@ class PetTrackerApp extends StatelessWidget {
         ),
         scaffoldBackgroundColor: shell,
         textTheme: ThemeData.light().textTheme.apply(
-              bodyColor: ink,
-              displayColor: ink,
-            ),
+          bodyColor: ink,
+          displayColor: ink,
+        ),
         cardTheme: const CardThemeData(
           color: Colors.white,
           margin: EdgeInsets.zero,
@@ -392,8 +397,9 @@ class _AuthPageState extends State<AuthPage> {
                             child: FilledButton(
                               onPressed: _isSubmitting ? null : _submit,
                               style: FilledButton.styleFrom(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 16),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
                               ),
                               child: _isSubmitting
                                   ? const SizedBox(
@@ -442,10 +448,11 @@ class _AuthPageState extends State<AuthPage> {
 
     try {
       if (_isLogin) {
-        final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
+        final credential = await FirebaseAuth.instance
+            .signInWithEmailAndPassword(
+              email: _emailController.text.trim(),
+              password: _passwordController.text.trim(),
+            );
         await _upsertUserProfileDocument(credential.user);
       } else {
         _isCompletingRegistration.value = true;
@@ -457,11 +464,11 @@ class _AuthPageState extends State<AuthPage> {
           lastSeenEnvironment: _defaultLastSeenEnvironment,
         );
 
-        final credential =
-            await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
+        final credential = await FirebaseAuth.instance
+            .createUserWithEmailAndPassword(
+              email: _emailController.text.trim(),
+              password: _passwordController.text.trim(),
+            );
 
         final user = credential.user;
         if (user != null) {
@@ -502,30 +509,30 @@ class _AuthPageState extends State<AuthPage> {
     final existingDoc = await docRef.get();
     final existingData = existingDoc.data() ?? <String, dynamic>{};
 
-    await docRef.set(
-      {
-        'email': user.email ?? _emailController.text.trim(),
-        'displayName': pendingProfile?.displayName ??
-            user.displayName ??
-            (existingData['displayName'] as String?) ??
-            '',
-        'petName': pendingProfile?.petName ??
-            (existingData['petName'] as String?) ??
-            '',
-        'petKind': (pendingProfile?.petKind ??
-                PetKind.fromStorageValue(existingData['petKind'] as String?))
-            .storageValue,
-        'lastSeenImageUrl': pendingProfile?.lastSeenImageUrl ??
-            (existingData['lastSeenImageUrl'] as String?) ??
-            _defaultLastSeenImageUrl,
-        'lastSeenEnvironment': pendingProfile?.lastSeenEnvironment ??
-            (existingData['lastSeenEnvironment'] as String?) ??
-            _defaultLastSeenEnvironment,
-        'updatedAt': FieldValue.serverTimestamp(),
-        'createdAt': existingData['createdAt'] ?? FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
+    await docRef.set({
+      'email': user.email ?? _emailController.text.trim(),
+      'displayName':
+          pendingProfile?.displayName ??
+          user.displayName ??
+          (existingData['displayName'] as String?) ??
+          '',
+      'petName':
+          pendingProfile?.petName ?? (existingData['petName'] as String?) ?? '',
+      'petKind':
+          (pendingProfile?.petKind ??
+                  PetKind.fromStorageValue(existingData['petKind'] as String?))
+              .storageValue,
+      'lastSeenImageUrl':
+          pendingProfile?.lastSeenImageUrl ??
+          (existingData['lastSeenImageUrl'] as String?) ??
+          _defaultLastSeenImageUrl,
+      'lastSeenEnvironment':
+          pendingProfile?.lastSeenEnvironment ??
+          (existingData['lastSeenEnvironment'] as String?) ??
+          _defaultLastSeenEnvironment,
+      'updatedAt': FieldValue.serverTimestamp(),
+      'createdAt': existingData['createdAt'] ?? FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 }
 
@@ -708,7 +715,12 @@ class _TrackerShellState extends State<TrackerShell> {
   int _selectedMockIndex = 1;
   double _rssiThreshold = -75;
   bool _isEnsuringProfile = false;
+  bool _isCaptureRequestInFlight = false;
+  bool _hasTriggeredCaptureForCurrentLoss = false;
   String? _profileSyncError;
+  String? _captureError;
+  String? _sessionLastSeenImageUrl;
+  String? _sessionLastSeenEnvironment;
   BleSelection? _selectedBleDevice;
   Timer? _bleRefreshTimer;
 
@@ -755,24 +767,33 @@ class _TrackerShellState extends State<TrackerShell> {
     }
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .snapshots(),
       builder: (context, snapshot) {
         final data = snapshot.data?.data();
         final pendingProfile = _pendingUserProfile.value;
         final profile = UserProfile(
-          displayName: (data?['displayName'] as String?) ??
+          displayName:
+              (data?['displayName'] as String?) ??
               pendingProfile?.displayName ??
               user.displayName ??
               '',
           petName:
-              (data?['petName'] as String?) ?? pendingProfile?.petName ?? 'Coco',
+              (data?['petName'] as String?) ??
+              pendingProfile?.petName ??
+              'Coco',
           petKind: PetKind.fromStorageValue(
-            (data?['petKind'] as String?) ?? pendingProfile?.petKind.storageValue,
+            (data?['petKind'] as String?) ??
+                pendingProfile?.petKind.storageValue,
           ),
-          lastSeenImageUrl: (data?['lastSeenImageUrl'] as String?) ??
+          lastSeenImageUrl:
+              (data?['lastSeenImageUrl'] as String?) ??
               pendingProfile?.lastSeenImageUrl ??
               _defaultLastSeenImageUrl,
-          lastSeenEnvironment: (data?['lastSeenEnvironment'] as String?) ??
+          lastSeenEnvironment:
+              (data?['lastSeenEnvironment'] as String?) ??
               pendingProfile?.lastSeenEnvironment ??
               _defaultLastSeenEnvironment,
         );
@@ -783,7 +804,10 @@ class _TrackerShellState extends State<TrackerShell> {
           });
         }
 
-        return _buildTrackerScaffold(profile, profileSyncError: _profileSyncError);
+        return _buildTrackerScaffold(
+          profile,
+          profileSyncError: _profileSyncError,
+        );
       },
     );
   }
@@ -808,21 +832,21 @@ class _TrackerShellState extends State<TrackerShell> {
 
     _isEnsuringProfile = true;
     try {
-      final docRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      final docRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid);
       final existingDoc = await docRef.get();
       if (!existingDoc.exists) {
-        await docRef.set(
-          {
-            'email': user.email ?? '',
-            'displayName': user.displayName ?? '',
-            'petName': '',
-            'petKind': PetKind.dog.storageValue,
-            'lastSeenImageUrl': _defaultLastSeenImageUrl,
-            'lastSeenEnvironment': _defaultLastSeenEnvironment,
-            'updatedAt': FieldValue.serverTimestamp(),
-            'createdAt': FieldValue.serverTimestamp(),
-          },
-        );
+        await docRef.set({
+          'email': user.email ?? '',
+          'displayName': user.displayName ?? '',
+          'petName': '',
+          'petKind': PetKind.dog.storageValue,
+          'lastSeenImageUrl': _defaultLastSeenImageUrl,
+          'lastSeenEnvironment': _defaultLastSeenEnvironment,
+          'updatedAt': FieldValue.serverTimestamp(),
+          'createdAt': FieldValue.serverTimestamp(),
+        });
       }
       if (mounted) {
         setState(() {
@@ -841,32 +865,49 @@ class _TrackerShellState extends State<TrackerShell> {
     }
   }
 
-  Widget _buildTrackerScaffold(UserProfile profile, {String? profileSyncError}) {
+  Widget _buildTrackerScaffold(
+    UserProfile profile, {
+    String? profileSyncError,
+  }) {
     final snapshot = _selectedBleDevice != null
         ? _liveSnapshotFromBle(profile, _selectedBleDevice!)
         : _mockStates[_selectedMockIndex].copyWith(
             petName: profile.petName,
             scanEnabled: _mockStates[_selectedMockIndex].isConnected,
           );
+    final effectiveLastSeenImageUrl =
+        _sessionLastSeenImageUrl ?? profile.lastSeenImageUrl;
+    final effectiveLastSeenEnvironment =
+        _sessionLastSeenEnvironment ?? profile.lastSeenEnvironment;
+
+    _maybeTriggerLostCapture(profile, snapshot);
 
     final pages = [
       HomePage(
         snapshot: snapshot,
         ownerName: profile.displayName,
         petKind: profile.petKind,
-        profileSyncError: profileSyncError,
+        profileSyncError: _mergeErrorMessages(profileSyncError, _captureError),
         selectedMockIndex: _selectedMockIndex,
         onScenarioSelected: _selectScenario,
         isUsingLiveBle: _selectedBleDevice != null,
       ),
       HistoryPage(
         snapshot: snapshot,
-        lastSeenImageUrl: profile.lastSeenImageUrl,
-        lastSeenEnvironment: profile.lastSeenEnvironment,
+        lastSeenImageUrl: effectiveLastSeenImageUrl,
+        lastSeenEnvironment: effectiveLastSeenEnvironment,
       ),
       DevicePage(
         snapshot: snapshot,
         rssiThreshold: _rssiThreshold,
+        raspberryPiBaseUrl: _raspberryPiBaseUrl,
+        isCaptureRequestInFlight: _isCaptureRequestInFlight,
+        onTriggerCameraTest: () {
+          if (_isCaptureRequestInFlight) {
+            return;
+          }
+          unawaited(_triggerRaspberryPiCapture(profile, snapshot));
+        },
         onThresholdChanged: (value) {
           setState(() {
             _rssiThreshold = value;
@@ -897,10 +938,7 @@ class _TrackerShellState extends State<TrackerShell> {
         ],
       ),
       body: SafeArea(
-        child: IndexedStack(
-          index: _currentTab,
-          children: pages,
-        ),
+        child: IndexedStack(index: _currentTab, children: pages),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentTab,
@@ -935,7 +973,121 @@ class _TrackerShellState extends State<TrackerShell> {
     );
   }
 
-  PetSnapshot _liveSnapshotFromBle(UserProfile profile, BleSelection selection) {
+  String? _mergeErrorMessages(String? profileError, String? captureError) {
+    if (profileError == null || profileError.isEmpty) {
+      return captureError;
+    }
+    if (captureError == null || captureError.isEmpty) {
+      return profileError;
+    }
+    return '$profileError\n$captureError';
+  }
+
+  void _maybeTriggerLostCapture(UserProfile profile, PetSnapshot snapshot) {
+    if (_selectedBleDevice == null) {
+      _hasTriggeredCaptureForCurrentLoss = false;
+      return;
+    }
+
+    if (snapshot.status != PetStatus.lost) {
+      _hasTriggeredCaptureForCurrentLoss = false;
+      return;
+    }
+
+    if (_hasTriggeredCaptureForCurrentLoss || _isCaptureRequestInFlight) {
+      return;
+    }
+
+    _hasTriggeredCaptureForCurrentLoss = true;
+    unawaited(_triggerRaspberryPiCapture(profile, snapshot));
+  }
+
+  Future<void> _triggerRaspberryPiCapture(
+    UserProfile profile,
+    PetSnapshot snapshot,
+  ) async {
+    setState(() {
+      _isCaptureRequestInFlight = true;
+      _captureError = null;
+    });
+
+    try {
+      final response = await http
+          .get(Uri.parse('$_raspberryPiBaseUrl/capture-meta'))
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode != 200) {
+        throw Exception('Capture request failed: ${response.statusCode}');
+      }
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final imagePath = data['image_url'] as String?;
+      final imageUrl = imagePath == null
+          ? null
+          : imagePath.startsWith('http')
+          ? imagePath
+          : '$_raspberryPiBaseUrl$imagePath';
+
+      if (imageUrl == null || imageUrl.isEmpty) {
+        throw Exception('Capture response did not include an image URL.');
+      }
+
+      final environment =
+          'BLE lost at ${snapshot.locationLabel} around ${snapshot.lastSeenTime}.';
+
+      if (mounted) {
+        setState(() {
+          _sessionLastSeenImageUrl = imageUrl;
+          _sessionLastSeenEnvironment = environment;
+          _captureError = null;
+        });
+      }
+
+      await _saveLastSeenCapture(profile, imageUrl, environment);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _captureError = 'Raspberry Pi capture failed: $error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCaptureRequestInFlight = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _saveLastSeenCapture(
+    UserProfile profile,
+    String imageUrl,
+    String environment,
+  ) async {
+    if (!_supportsFirebaseAuthOnThisPlatform || Firebase.apps.isEmpty) {
+      return;
+    }
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return;
+    }
+
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+      'displayName': profile.displayName,
+      'petName': profile.petName,
+      'petKind': profile.petKind.storageValue,
+      'lastSeenImageUrl': imageUrl,
+      'lastSeenEnvironment': environment,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  PetSnapshot _liveSnapshotFromBle(
+    UserProfile profile,
+    BleSelection selection,
+  ) {
     final age = DateTime.now().difference(selection.updatedAt);
     final status = age > _bleLostTimeout
         ? PetStatus.lost
@@ -946,7 +1098,9 @@ class _TrackerShellState extends State<TrackerShell> {
       rssi: selection.rssi,
       lastSeenTime: _formatTime(selection.updatedAt),
       isConnected: age <= _bleLostTimeout,
-      locationLabel: age > _bleLostTimeout ? 'Last BLE sighting' : 'Live BLE scan',
+      locationLabel: age > _bleLostTimeout
+          ? 'Last BLE sighting'
+          : 'Live BLE scan',
       beaconName: selection.deviceName,
       uuid: selection.remoteId,
       scanEnabled: age <= _bleLostTimeout,
@@ -1199,25 +1353,16 @@ class HistoryPage extends StatelessWidget {
                 const SizedBox(height: 16),
                 const Divider(),
                 const SizedBox(height: 16),
-                _HistoryRow(
-                  label: 'Location',
-                  value: snapshot.locationLabel,
-                ),
+                _HistoryRow(label: 'Location', value: snapshot.locationLabel),
                 const SizedBox(height: 12),
-                _HistoryRow(
-                  label: 'Raw RSSI',
-                  value: '${snapshot.rssi} dBm',
-                ),
+                _HistoryRow(label: 'Raw RSSI', value: '${snapshot.rssi} dBm'),
                 const SizedBox(height: 12),
                 _HistoryRow(
                   label: 'Detection count',
                   value: '${snapshot.detectionCount}',
                 ),
                 const SizedBox(height: 12),
-                _HistoryRow(
-                  label: 'Environment',
-                  value: lastSeenEnvironment,
-                ),
+                _HistoryRow(label: 'Environment', value: lastSeenEnvironment),
               ],
             ),
           ),
@@ -1307,11 +1452,17 @@ class DevicePage extends StatelessWidget {
     super.key,
     required this.snapshot,
     required this.rssiThreshold,
+    required this.raspberryPiBaseUrl,
+    required this.isCaptureRequestInFlight,
+    required this.onTriggerCameraTest,
     required this.onThresholdChanged,
   });
 
   final PetSnapshot snapshot;
   final double rssiThreshold;
+  final String raspberryPiBaseUrl;
+  final bool isCaptureRequestInFlight;
+  final VoidCallback onTriggerCameraTest;
   final ValueChanged<double> onThresholdChanged;
 
   @override
@@ -1340,6 +1491,56 @@ class DevicePage extends StatelessWidget {
                 _HistoryRow(
                   label: 'Scan status',
                   value: snapshot.scanEnabled ? 'Enabled' : 'Disabled',
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Raspberry Pi Camera',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Base URL: $raspberryPiBaseUrl',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Colors.black54,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: isCaptureRequestInFlight
+                      ? null
+                      : onTriggerCameraTest,
+                  icon: isCaptureRequestInFlight
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.photo_camera_outlined),
+                  label: Text(
+                    isCaptureRequestInFlight
+                        ? 'Capturing...'
+                        : 'Test Camera Capture',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Use this to verify the Raspberry Pi camera service before relying on automatic BLE lost triggers.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Colors.black54,
+                    height: 1.4,
+                  ),
                 ),
               ],
             ),
@@ -1404,7 +1605,7 @@ class BleDebugPage extends StatefulWidget {
 
 class _BleDebugPageState extends State<BleDebugPage> {
   late final StreamSubscription<BluetoothAdapterState>
-      _adapterStateSubscription;
+  _adapterStateSubscription;
   late final StreamSubscription<bool> _isScanningSubscription;
   late final StreamSubscription<List<ScanResult>> _scanResultsSubscription;
 
@@ -1436,8 +1637,9 @@ class _BleDebugPageState extends State<BleDebugPage> {
     try {
       _isSupported = await FlutterBluePlus.isSupported;
 
-      _adapterStateSubscription =
-          FlutterBluePlus.adapterState.listen((BluetoothAdapterState state) {
+      _adapterStateSubscription = FlutterBluePlus.adapterState.listen((
+        BluetoothAdapterState state,
+      ) {
         if (!mounted) {
           return;
         }
@@ -1458,38 +1660,42 @@ class _BleDebugPageState extends State<BleDebugPage> {
         }
       });
 
-      _scanResultsSubscription =
-          FlutterBluePlus.scanResults.listen((List<ScanResult> results) {
-        results.sort((a, b) => b.rssi.compareTo(a.rssi));
+      _scanResultsSubscription = FlutterBluePlus.scanResults.listen(
+        (List<ScanResult> results) {
+          results.sort((a, b) => b.rssi.compareTo(a.rssi));
 
-        if (!mounted) {
-          return;
-        }
-
-        setState(() {
-          _scanResults = List<ScanResult>.from(results);
-          _scanError = null;
-          if (_selectedRemoteId != null &&
-              !_scanResults.any(
-                (result) => result.device.remoteId.str == _selectedRemoteId,
-              )) {
-            // Keep tracking the last chosen device; it may simply be
-            // temporarily out of range and should age into Lost.
+          if (!mounted) {
+            return;
           }
-        });
 
-        final selectedResult = _selectedResult;
-        if (selectedResult != null) {
-          widget.onSelectedDeviceChanged(_selectionFromResult(selectedResult));
-        }
-      }, onError: (Object error) {
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _scanError = 'Scan error: $error';
-        });
-      });
+          setState(() {
+            _scanResults = List<ScanResult>.from(results);
+            _scanError = null;
+            if (_selectedRemoteId != null &&
+                !_scanResults.any(
+                  (result) => result.device.remoteId.str == _selectedRemoteId,
+                )) {
+              // Keep tracking the last chosen device; it may simply be
+              // temporarily out of range and should age into Lost.
+            }
+          });
+
+          final selectedResult = _selectedResult;
+          if (selectedResult != null) {
+            widget.onSelectedDeviceChanged(
+              _selectionFromResult(selectedResult),
+            );
+          }
+        },
+        onError: (Object error) {
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _scanError = 'Scan error: $error';
+          });
+        },
+      );
 
       if (mounted) {
         setState(() {});
@@ -1699,8 +1905,9 @@ class _BleDebugPageState extends State<BleDebugPage> {
                 Row(
                   children: [
                     FilledButton.icon(
-                      onPressed:
-                          _isSupported && !_isScanning ? _startScan : null,
+                      onPressed: _isSupported && !_isScanning
+                          ? _startScan
+                          : null,
                       icon: const Icon(Icons.play_arrow),
                       label: const Text('Start Scan'),
                     ),
@@ -1862,9 +2069,7 @@ class _BleDebugPageState extends State<BleDebugPage> {
                 const SizedBox(height: 6),
                 Text(
                   result.device.remoteId.str,
-                  style: const TextStyle(
-                    color: Colors.black54,
-                  ),
+                  style: const TextStyle(color: Colors.black54),
                 ),
                 const SizedBox(height: 10),
                 Wrap(
@@ -1902,8 +2107,9 @@ class _MetricTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final foreground = light ? Colors.white : const Color(0xFF1E2A2F);
-    final background =
-        light ? Colors.white.withValues(alpha: 0.16) : Colors.white;
+    final background = light
+        ? Colors.white.withValues(alpha: 0.16)
+        : Colors.white;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -1979,17 +2185,17 @@ class _HistoryRow extends StatelessWidget {
           width: 112,
           child: Text(
             label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.black54,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: Colors.black54),
           ),
         ),
         Expanded(
           child: Text(
             value,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
           ),
         ),
       ],

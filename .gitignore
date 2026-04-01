@@ -3,6 +3,7 @@
 *.log
 *.pyc
 *.swp
+__pycache__/
 .DS_Store
 .atom/
 .build/
@@ -43,3 +44,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# PlatformIO
+**/.pio/
+**/.pioenvs/
+**/.piolibdeps/
+raspberry_pi/petcam/captures/

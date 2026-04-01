@@ -47,6 +47,8 @@ This version is intended as a prototype for testing BLE discovery and interactio
 - `lib/firebase_options.dart`: Firebase platform configuration
 - `ios/Runner/Info.plist`: iOS Bluetooth permission text
 - `android/` and `ios/`: mobile platform configuration
+- `esp32/petracker/`: earlier ESP32-CAM prototype firmware
+- `raspberry_pi/petcam/`: phase 1 Raspberry Pi camera service
 
 ## Running the App
 
@@ -55,6 +57,20 @@ This version is intended as a prototype for testing BLE discovery and interactio
 3. Ensure Firebase configuration files are present for the target platform.
 4. Enable Bluetooth permissions on the device.
 5. Run the app with `flutter run`.
+
+## Raspberry Pi Camera Flow
+
+Phase 1 uses a Raspberry Pi camera service instead of the earlier ESP32-CAM hardware.
+
+1. Copy `raspberry_pi/petcam/` to the Pi.
+2. On the Pi, install the runtime packages:
+   `sudo apt install -y python3-picamera2 python3-flask`
+3. Start the service with `python3 app.py`
+4. Confirm these endpoints work from the phone or laptop:
+   `http://<pi-ip>:8000/health`
+   `http://<pi-ip>:8000/capture-meta`
+5. In the Flutter app, update `_raspberryPiBaseUrl` in [lib/main.dart](/Users/tangyihuang/mobile/myfirstapp_github/lib/main.dart) to your Pi IP.
+6. Open the `Device` tab and use `Test Camera Capture` before validating automatic BLE lost capture.
 
 ## Notes
 
