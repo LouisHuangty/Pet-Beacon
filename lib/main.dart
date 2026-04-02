@@ -38,7 +38,7 @@ const String _defaultLastSeenImageUrl =
 const String _defaultLastSeenEnvironment =
     'Near the garden path, next to the wooden fence.';
 const Duration _bleLostTimeout = Duration(seconds: 8);
-const String _raspberryPiBaseUrl = 'http://192.168.3.51:8000';
+const String _raspberryPiBaseUrl = 'http://192.168.3.53';
 
 enum PetKind {
   dog('dog', 'Dog', '🐶'),
