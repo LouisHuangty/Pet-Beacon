@@ -200,13 +200,11 @@ http://<camera-ip>/stream
 - Camera capture reliability depends on the local board and Wi-Fi stability
 - The system is still a prototype rather than a deployable pet tracking product
 
-## Future Improvements
+## Future Work
 
-- clearer in-app distinction between automatic and manual capture states
-- stronger BLE device identification and pairing flow
-- more robust camera retry and recovery logic
-- richer event history and export options
-- better visual documentation and final project media
+- Add flash or low-light support so the camera can still capture usable images in dark environments.
+- Explore a 360-degree camera setup to provide richer visual context when a single fixed view is not distinctive enough.
+- Integrate GPS-based location tracking for more precise real-time pet positioning beyond BLE proximity alone.
 
 ## Media Placeholders
 
