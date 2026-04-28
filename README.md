@@ -6,64 +6,38 @@ This repository was developed as part of CASA0015 Mobile Systems & Interactions 
 
 ## App Link
 
-- GitHub repository: <https://github.com/LouisHuangty/casa0015-mobile-assessment>
+- GitHub repository: <https://github.com/LouisHuangty/Pet-Beacon>
 
-## Preview
 
-Image placeholders are kept here for now and can be replaced later with screenshots, diagrams, or demo stills.
+## Idea Generation and Research
 
-```text
-[Placeholder] Hero image / app overview screenshot
-```
+The idea for Pet Beacon began with a short `Crazy 8's` ideation exercise. This method was used to generate multiple app directions quickly, then narrow them through peer feedback. During that validation stage, animal tracking received strong interest from peers, which suggested that it addressed a recognisable and meaningful need.
 
-```text
-[Placeholder] Home page screenshot
-```
+The supporting class research notes and idea development material are shown below:
 
-```text
-[Placeholder] BLE page screenshot
-```
+![Idea generation and research](Images/idea-generation-research.jpg)
 
-```text
-[Placeholder] Device page screenshot
-```
 
-## Project Overview
 
-Pet Beacon is built around a simple idea: use a BLE tag as a proximity signal for a pet, and combine it with a local camera board so that the owner can react when the pet moves farther away.
+## Paper Prototyping
 
-The current version supports:
+The hand-drawn storyboard below reflects the early interaction concept before the interface was fully implemented. It focuses on the main user flow: sign in, register a pet profile, select a BLE tag, monitor proximity, configure the camera service, and review capture history.
 
-- Firebase email and password authentication
-- Firestore-backed user profile storage
-- Pet profile setup with pet name and pet type
-- BLE scanning and nearby device selection
-- RSSI-based state mapping for `Very Close`, `Nearby`, and `Far`
-- Automatic image capture when the selected BLE device enters `Far`
-- Manual camera test capture from the app
-- Camera service health detection on the local network
-- History and last-seen style review screens
+![Pet Beacon hand-drawn storyboard](Images/storyboard.png)
 
-## Problem Statement
+## Showcase App
 
-Common consumer pet trackers often depend on external networks, closed platforms, or more complex infrastructure than is necessary for local testing and prototyping. This project explores a more direct setup:
+The following screenshots show the implemented app screens that correspond to the early storyboard flow.
 
-- a mobile app scans for a nearby BLE device
-- signal strength is interpreted as a rough proximity estimate
-- a local camera board provides a recent image when distance increases
+<p align="center">
+  <img src="Images/showcase1.png" alt="Pet Beacon showcase screen 1" width="100%">
+</p>
 
-The aim is not to build a production-ready pet tracker, but to prototype a practical interaction flow that links sensing, notification, and visual confirmation.
+<p align="center">
+  <img src="Images/showcase2.png" alt="Pet Beacon showcase screen 2" width="100%">
+</p>
 
-## Core Workflow
-
-1. The user signs in and sets up a pet profile.
-2. The app scans nearby BLE devices on the `BLE` page.
-3. The user selects one BLE device as the tracking source.
-4. The app maps RSSI values into proximity states.
-5. When the selected device moves into `Far`, the app triggers a local camera capture.
-6. The latest image and event details appear in the app history and last-seen views.
-
-## Main Features
+<!-- ## Main Features
 
 ### 1. Authentication and Profile
 
@@ -92,7 +66,33 @@ The aim is not to build a production-ready pet tracker, but to prototype a pract
 - `Home`: current pet state and last automatic capture
 - `History`: last seen information and capture events
 - `Device`: camera endpoint, manual capture, and RSSI threshold controls
-- `BLE`: scan, select, and debug nearby BLE devices
+- `BLE`: scan, select, and debug nearby BLE devices -->
+
+## Project Overview
+
+Pet Beacon is built around a simple idea: use a BLE tag as a proximity signal for a pet, and combine it with a local camera board so that the owner can react when the pet moves farther away.
+
+The current version supports:
+
+- Firebase email and password authentication
+- Firestore-backed user profile storage
+- Pet profile setup with pet name and pet type
+- BLE scanning and nearby device selection
+- RSSI-based state mapping for `Very Close`, `Nearby`, and `Far`
+- Automatic image capture when the selected BLE device enters `Far`
+- Manual camera test capture from the app
+- Camera service health detection on the local network
+- History and last-seen style review screens
+
+
+## Core Workflow
+
+1. The user signs in and sets up a pet profile.
+2. The app scans nearby BLE devices on the `BLE` page.
+3. The user selects one BLE device as the tracking source.
+4. The app maps RSSI values into proximity states.
+5. When the selected device moves into `Far`, the app triggers a local camera capture.
+6. The latest image and event details appear in the app history and last-seen views.
 
 ## Screens and Interaction Notes
 
@@ -141,23 +141,14 @@ The active TimerCAM firmware currently supports:
 
 ## Repository Structure
 
-- `lib/main.dart` - main Flutter UI, BLE workflow, and camera logic
+- `lib/main.dart` - main Flutter UI, BLE workflow, and camera integration
 - `lib/firebase_options.dart` - Firebase platform configuration
 - `pubspec.yaml` - Flutter dependencies and app version
-- `esp32/imercam_x/` - active M5Stack TimerCAM firmware
-- `esp32/petracker/` - earlier ESP32-CAM experiment
-- `raspberry_pi/petcam/` - earlier Raspberry Pi camera service experiment
+- `Images/` - storyboard, showcase screenshots, and research visuals used in the README
+- `esp32/imercam_x/` - active M5Stack TimerCAM firmware used by the current prototype
+- `esp32/petracker/` - earlier ESP32-CAM prototype retained for reference
+- `raspberry_pi/petcam/` - earlier Raspberry Pi camera prototype retained for reference
 
-## Tech Stack
-
-- Flutter
-- Dart
-- Firebase Authentication
-- Cloud Firestore
-- FlutterBluePlus
-- HTTP
-- PlatformIO
-- ESP32 / M5Stack TimerCAM firmware
 
 ## Installation
 
@@ -198,7 +189,6 @@ http://<camera-ip>/stream
 - RSSI is only a rough proxy for physical distance
 - BLE detection can still vary with environment and device orientation
 - Camera capture reliability depends on the local board and Wi-Fi stability
-- The system is still a prototype rather than a deployable pet tracking product
 
 ## Future Work
 
@@ -206,22 +196,6 @@ http://<camera-ip>/stream
 - Explore a 360-degree camera setup to provide richer visual context when a single fixed view is not distinctive enough.
 - Integrate GPS-based location tracking for more precise real-time pet positioning beyond BLE proximity alone.
 
-## Media Placeholders
+## Contact
 
-You can replace these later with final assets:
-
-```text
-[Placeholder] System architecture diagram
-```
-
-```text
-[Placeholder] BLE workflow diagram
-```
-
-```text
-[Placeholder] Hardware setup photo
-```
-
-```text
-[Placeholder] Demo GIF or QR code link
-```
+- Email: huangty393@gmail.com

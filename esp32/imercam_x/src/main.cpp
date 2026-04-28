@@ -8,8 +8,8 @@
 
 namespace {
 
-constexpr char kWifiSsid[] = "不许偷网2.0";
-constexpr char kWifiPassword[] = "hjq311099";
+constexpr char kWifiSsid[] = "Tangyi";
+constexpr char kWifiPassword[] = "hty88888888";
 constexpr char kDeviceName[] = "PetCam";
 constexpr char kFallbackApSsid[] = "PetCam-Setup";
 constexpr char kFallbackApPassword[] = "12345678";
