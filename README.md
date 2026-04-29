@@ -197,6 +197,6 @@ http://<camera-ip>/stream
 - Explore a 360-degree camera setup to provide richer visual context when a single fixed view is not distinctive enough.
 - Integrate GPS-based location tracking for more precise real-time pet positioning beyond BLE proximity alone.
 
-## Contact
+##  Contact Details
 
 - Email: huangty393@gmail.com
